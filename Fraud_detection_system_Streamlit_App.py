@@ -1,150 +1,148 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import time
-import matplotlib.pyplot as plt
-import seaborn as sns
-from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
 
-# ----------------------------
-# PAGE CONFIGURATION
-# ----------------------------
-st.set_page_config(
-    page_title="Transaction Guard AI",
-    page_icon="💳",
-    layout="wide"
-)
+# ==================== PAGE SETUP ====================
+st.set_page_config(page_title="Transaction Guard AI", layout="centered")
 
-# ----------------------------
-# PAGE HEADER
-# ----------------------------
+# ==================== CUSTOM CSS ====================
 st.markdown("""
-    <div style="background:linear-gradient(90deg, #e3f2fd, #bbdefb);
-                padding:25px; border-radius:12px; text-align:center;">
-        <h1 style="color:#0d47a1; margin-bottom:5px;">💳 Transaction Guard AI</h1>
-        <h3 style="color:#1565C0; margin-top:0;">An AI-powered Transaction Fraud Detection System</h3>
-        <p style="text-align:right; color:#1a237e; font-weight:bold; font-size:16px;">Developed by Mantri Diwakar</p>
-    </div>
+    <style>
+        /* Gradient header */
+        .main-header {
+            background: linear-gradient(90deg, #0062E6, #33AEFF);
+            color: white;
+            padding: 25px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
+        }
+
+        /* Upload box style */
+        .stFileUploader {
+            background: rgba(240, 248, 255, 0.7);
+            border-radius: 12px;
+            padding: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        /* Section titles */
+        h3 {
+            color: #1a73e8;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 15px;
+            margin-top: 40px;
+            border-top: 1px solid #eaeaea;
+            color: #555;
+            font-size: 15px;
+        }
+
+        /* Divider */
+        .divider {
+            border-top: 2px solid #e3e3e3;
+            margin: 30px 0;
+        }
+
+    </style>
 """, unsafe_allow_html=True)
 
-st.markdown("")
+# ==================== HEADER ====================
+st.markdown("""
+<div class="main-header">
+    <h1>💳 Transaction Guard AI</h1>
+    <h3>An AI-powered Transaction Fraud Detection System</h3>
+    <p style='margin-top:10px; font-size:15px;'>Developed by <b>Mantri Diwakar</b></p>
+</div>
+""", unsafe_allow_html=True)
 
-# ----------------------------
-# STEP 1: TRAINING DATA UPLOAD
-# ----------------------------
-st.markdown("### 🧠 Step 1: Upload Training Dataset (with `fraud` column)")
-train_file = st.file_uploader("Upload training file (CSV/XLSX)", type=["csv", "xlsx"], key="train")
+# ==================== STEP 1: UPLOAD TRAINING DATA ====================
+st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+st.markdown("### 🧠 Step 1: Upload Training Dataset (must include a 'Fraud' column)")
+train_file = st.file_uploader("Upload Training Dataset", type=["csv"], key="train")
 
-if train_file:
-    if train_file.name.endswith('.csv'):
-        train_df = pd.read_csv(train_file)
-    else:
-        train_df = pd.read_excel(train_file)
+model = None
 
-    if 'fraud' not in train_df.columns:
-        st.error("❌ Training dataset must contain a column named 'fraud'")
-        st.stop()
-
+if train_file is not None:
+    train_data = pd.read_csv(train_file)
     st.success("✅ Training dataset uploaded successfully!")
-    st.dataframe(train_df.head())
+    st.dataframe(train_data.head())
 
-    # Training section
-    st.markdown("### 🚀 Training the Model...")
-    start_time = time.time()
+    if 'Fraud' not in train_data.columns:
+        st.error("The dataset must contain a column named 'Fraud'. Please upload the correct file.")
+    else:
+        # Encode categorical features
+        df = train_data.copy()
+        label_encoders = {}
+        for col in df.select_dtypes(include=['object']).columns:
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col])
+            label_encoders[col] = le
 
-    X = train_df.drop(columns=['fraud'])
-    y = train_df['fraud']
-    X = pd.get_dummies(X, drop_first=True)
+        X = df.drop('Fraud', axis=1)
+        y = df['Fraud']
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.25, random_state=42)
-    model = RandomForestClassifier(random_state=42)
-    model.fit(X_train, y_train)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-    train_duration = time.time() - start_time
-    st.success(f"🎉 Model training completed successfully in {train_duration:.2f} seconds!")
+        # Show progress animation
+        st.markdown("#### 🚀 Training the Model...")
+        progress = st.progress(0)
+        for i in range(100):
+            time.sleep(0.02)
+            progress.progress(i + 1)
 
-    y_pred = model.predict(X_test)
-    accuracy = accuracy_score(y_test, y_pred)
-    cm = confusion_matrix(y_test, y_pred)
-    report = classification_report(y_test, y_pred, output_dict=True)
+        # Train model
+        start_time = time.time()
+        model = RandomForestClassifier(n_estimators=200, random_state=42)
+        model.fit(X_train, y_train)
+        end_time = time.time()
+        training_time = round(end_time - start_time, 2)
 
-    st.metric("Model Accuracy", f"{accuracy*100:.2f}%")
-    st.write("#### Confusion Matrix")
-    st.dataframe(pd.DataFrame(cm, index=["Actual 0", "Actual 1"], columns=["Predicted 0", "Predicted 1"]))
-    st.write("#### Classification Report")
-    st.dataframe(pd.DataFrame(report).transpose())
+        y_pred = model.predict(X_val)
+        acc = accuracy_score(y_val, y_pred) * 100
 
-    # ----------------------------
-    # STEP 2: TEST DATA UPLOAD
-    # ----------------------------
-    st.markdown("---")
-    st.markdown("### 📂 Step 2: Upload Test Dataset (without `fraud` column)")
-    test_file = st.file_uploader("Upload test file (CSV/XLSX)", type=["csv", "xlsx"], key="test")
+        st.success(f"🎉 Model training completed successfully in {training_time} seconds!")
+        st.info(f"Validation Accuracy: **{acc:.2f}%**")
 
-    if test_file:
-        if test_file.name.endswith('.csv'):
-            test_df = pd.read_csv(test_file)
-        else:
-            test_df = pd.read_excel(test_file)
+# ==================== STEP 2: UPLOAD TEST DATA ====================
+if model is not None:
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    st.markdown("### 📊 Step 2: Upload Test Dataset (without 'Fraud' column)")
+    test_file = st.file_uploader("Upload Test Dataset", type=["csv"], key="test")
 
+    if test_file is not None:
+        test_data = pd.read_csv(test_file)
         st.success("✅ Test dataset uploaded successfully!")
-        st.dataframe(test_df.head())
+        st.dataframe(test_data.head())
 
-        # Align columns with trained model
-        test_encoded = pd.get_dummies(test_df, drop_first=True)
-        missing_cols = set(X.columns) - set(test_encoded.columns)
-        for c in missing_cols:
-            test_encoded[c] = 0
-        test_encoded = test_encoded[X.columns]
-
-        # Predict frauds
-        predictions = model.predict(test_encoded)
-        test_df['Predicted_Fraud'] = predictions
-
-        fraud_cases = test_df[test_df['Predicted_Fraud'] == 1]
-        total_transactions = len(test_df)
-        fraud_count = len(fraud_cases)
-
-        st.markdown("### 📊 Detection Summary")
-        col1, col2 = st.columns(2)
-        col1.metric("Total Transactions", total_transactions)
-        col2.metric("Fraud Detected", fraud_count)
-
-        # Fraud table and download option
-        st.markdown("### ⚠️ Fraudulent Transactions Detected")
-        st.dataframe(fraud_cases.head(10))
-
-        csv = fraud_cases.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="⬇️ Download Fraudulent Transactions",
-            data=csv,
-            file_name="fraud_detected.csv",
-            mime="text/csv"
-        )
-
-        # ----------------------------
-        # STEP 3: DATA VISUALIZATION
-        # ----------------------------
-        st.markdown("---")
-        st.subheader("📈 Data Visualization Dashboard")
-
-        numeric_cols = test_df.select_dtypes(include=np.number).columns.tolist()
-        if len(numeric_cols) > 0:
-            st.markdown("#### 📊 Create Custom Graphs")
-            graph_type = st.selectbox("Select Graph Type", ["Histogram", "Scatter", "Boxplot"])
-            x_axis = st.selectbox("Select X-axis", numeric_cols)
-            y_axis = st.selectbox("Select Y-axis (optional)", [None] + numeric_cols)
-
-            plt.figure(figsize=(7, 4))
-            if graph_type == "Histogram":
-                sns.histplot(test_df[x_axis], bins=30, kde=True, color="#42a5f5")
-            elif graph_type == "Scatter" and y_axis:
-                sns.scatterplot(x=test_df[x_axis], y=test_df[y_axis], color="#1e88e5")
-            elif graph_type == "Boxplot" and y_axis:
-                sns.boxplot(x=test_df[x_axis], y=test_df[y_axis], palette="Blues")
+        test_df = test_data.copy()
+        for col in test_df.select_dtypes(include=['object']).columns:
+            if col in label_encoders:
+                test_df[col] = label_encoders[col].transform(test_df[col])
             else:
-                st.warning("Please select a valid combination for the selected graph.")
-            st.pyplot(plt)
+                st.warning(f"⚠️ Unknown column '{col}' found. Encoding skipped.")
+
+        preds = model.predict(test_df)
+        probs = model.predict_proba(test_df)[:, 1]
+
+        results = test_data.copy()
+        results['Predicted_Fraud'] = preds
+        results['Fraud_Probability'] = probs
+
+        st.markdown("### 🔍 Prediction Results")
+        st.dataframe(results.head(15))
+
+        csv_download = results.to_csv(index=False).encode('utf-8')
+        st.download_button("⬇️ Download Results as CSV", csv_download, "fraud_predictions.csv", "text/csv")
+
+# ==================== FOOTER ====================
+st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+st.markdown("<div class='footer'>💡 Developed by <b>Mantri Diwakar</b> | Powered by AI & Streamlit</div>", unsafe_allow_html=True)
 
