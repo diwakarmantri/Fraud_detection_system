@@ -12,7 +12,6 @@ st.set_page_config(page_title="Transaction Guard AI", layout="centered")
 # ==================== CUSTOM CSS ====================
 st.markdown("""
     <style>
-        /* Gradient header */
         .main-header {
             background: linear-gradient(90deg, #0062E6, #33AEFF);
             color: white;
@@ -21,21 +20,13 @@ st.markdown("""
             text-align: center;
             box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
         }
-
-        /* Upload box style */
         .stFileUploader {
             background: rgba(240, 248, 255, 0.7);
             border-radius: 12px;
             padding: 10px;
             box-shadow: 0 2px 6px rgba(0,0,0,0.08);
         }
-
-        /* Section titles */
-        h3 {
-            color: #1a73e8;
-        }
-
-        /* Footer */
+        h3 { color: #1a73e8; }
         .footer {
             text-align: center;
             padding: 15px;
@@ -44,13 +35,10 @@ st.markdown("""
             color: #555;
             font-size: 15px;
         }
-
-        /* Divider */
         .divider {
             border-top: 2px solid #e3e3e3;
             margin: 30px 0;
         }
-
     </style>
 """, unsafe_allow_html=True)
 
@@ -69,6 +57,7 @@ st.markdown("### 🧠 Step 1: Upload Training Dataset (must include a 'Fraud' co
 train_file = st.file_uploader("Upload Training Dataset", type=["csv"], key="train")
 
 model = None
+label_encoders = {}
 
 if train_file is not None:
     train_data = pd.read_csv(train_file)
@@ -78,9 +67,8 @@ if train_file is not None:
     if 'Fraud' not in train_data.columns:
         st.error("The dataset must contain a column named 'Fraud'. Please upload the correct file.")
     else:
-        # Encode categorical features
+        # Encode all categorical features
         df = train_data.copy()
-        label_encoders = {}
         for col in df.select_dtypes(include=['object']).columns:
             le = LabelEncoder()
             df[col] = le.fit_transform(df[col])
@@ -91,7 +79,7 @@ if train_file is not None:
 
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Show progress animation
+        # Progress animation
         st.markdown("#### 🚀 Training the Model...")
         progress = st.progress(0)
         for i in range(100):
@@ -123,12 +111,28 @@ if model is not None:
         st.dataframe(test_data.head())
 
         test_df = test_data.copy()
+
+        # Handle categorical columns robustly
         for col in test_df.select_dtypes(include=['object']).columns:
             if col in label_encoders:
-                test_df[col] = label_encoders[col].transform(test_df[col])
-            else:
-                st.warning(f"⚠️ Unknown column '{col}' found. Encoding skipped.")
+                le = label_encoders[col]
 
+                # Replace unseen labels with 'unknown'
+                test_df[col] = test_df[col].apply(lambda x: x if x in le.classes_ else 'unknown')
+
+                # Add 'unknown' to classes_ if not present
+                if 'unknown' not in le.classes_:
+                    le.classes_ = list(le.classes_) + ['unknown']
+
+                test_df[col] = le.transform(test_df[col])
+            else:
+                # If the column is new, encode it as 'unknown'
+                test_df[col] = 'unknown'
+                le = LabelEncoder()
+                le.fit(['unknown'])
+                test_df[col] = le.transform(test_df[col])
+
+        # Make predictions
         preds = model.predict(test_df)
         probs = model.predict_proba(test_df)[:, 1]
 
