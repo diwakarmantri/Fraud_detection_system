@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -112,7 +113,7 @@ if model is not None:
 
         test_df = test_data.copy()
 
-        # Handle categorical columns robustly
+        # Robustly handle all categorical columns
         for col in test_df.select_dtypes(include=['object']).columns:
             if col in label_encoders:
                 le = label_encoders[col]
@@ -120,13 +121,13 @@ if model is not None:
                 # Replace unseen labels with 'unknown'
                 test_df[col] = test_df[col].apply(lambda x: x if x in le.classes_ else 'unknown')
 
-                # Add 'unknown' to classes_ if not present
+                # Add 'unknown' to classes_ if not present (keep as np.array)
                 if 'unknown' not in le.classes_:
-                    le.classes_ = list(le.classes_) + ['unknown']
+                    le.classes_ = np.append(le.classes_, 'unknown')
 
                 test_df[col] = le.transform(test_df[col])
             else:
-                # If the column is new, encode it as 'unknown'
+                # New column in test data: encode all values as 'unknown'
                 test_df[col] = 'unknown'
                 le = LabelEncoder()
                 le.fit(['unknown'])
