@@ -40,6 +40,16 @@ st.markdown("""
             border-top: 2px solid #e3e3e3;
             margin: 30px 0;
         }
+        .card {
+            padding: 18px;
+            border-radius: 14px;
+            color: #000;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            box-shadow: 0px 3px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
     </style>
 """, unsafe_allow_html=True)
 
@@ -68,7 +78,7 @@ if train_file is not None:
     if 'Fraud' not in train_data.columns:
         st.error("The dataset must contain a column named 'Fraud'. Please upload the correct file.")
     else:
-        # Encode all categorical features
+        # Encode categorical features
         df = train_data.copy()
         for col in df.select_dtypes(include=['object']).columns:
             le = LabelEncoder()
@@ -91,8 +101,7 @@ if train_file is not None:
         start_time = time.time()
         model = RandomForestClassifier(n_estimators=200, random_state=42)
         model.fit(X_train, y_train)
-        end_time = time.time()
-        training_time = round(end_time - start_time, 2)
+        training_time = round(time.time() - start_time, 2)
 
         y_pred = model.predict(X_val)
         acc = accuracy_score(y_val, y_pred) * 100
@@ -113,27 +122,24 @@ if model is not None:
 
         test_df = test_data.copy()
 
-        # Robustly handle all categorical columns
+        # Handle categorical encodings safely
         for col in test_df.select_dtypes(include=['object']).columns:
             if col in label_encoders:
                 le = label_encoders[col]
 
-                # Replace unseen labels with 'unknown'
                 test_df[col] = test_df[col].apply(lambda x: x if x in le.classes_ else 'unknown')
 
-                # Add 'unknown' to classes_ if not present (keep as np.array)
                 if 'unknown' not in le.classes_:
                     le.classes_ = np.append(le.classes_, 'unknown')
 
                 test_df[col] = le.transform(test_df[col])
             else:
-                # New column in test data: encode all values as 'unknown'
                 test_df[col] = 'unknown'
                 le = LabelEncoder()
                 le.fit(['unknown'])
                 test_df[col] = le.transform(test_df[col])
 
-        # Make predictions
+        # Predictions
         preds = model.predict(test_df)
         probs = model.predict_proba(test_df)[:, 1]
 
@@ -141,6 +147,45 @@ if model is not None:
         results['Predicted_Fraud'] = preds
         results['Fraud_Probability'] = probs
 
+        # ==================== SUMMARY CARDS ====================
+        total_tx = len(results)
+        fraud_tx = results['Predicted_Fraud'].sum()
+        non_fraud_tx = total_tx - fraud_tx
+        fraud_percent = round((fraud_tx / total_tx) * 100, 2)
+
+        st.markdown("### 📌 Summary of Predictions")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.markdown(f"""
+            <div class="card" style="background:#e8f4ff; border-left:6px solid #1a73e8;">
+                📦<br>Total<br><span style="font-size:22px;">{total_tx}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"""
+            <div class="card" style="background:#ffecec; border-left:6px solid #ff4c4c;">
+                ⚠️<br>Fraud<br><span style="font-size:22px;">{fraud_tx}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col3:
+            st.markdown(f"""
+            <div class="card" style="background:#e9ffec; border-left:6px solid #22c55e;">
+                ✔️<br>Non-Fraud<br><span style="font-size:22px;">{non_fraud_tx}</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        with col4:
+            st.markdown(f"""
+            <div class="card" style="background:#fff8e6; border-left:6px solid #f5a623;">
+                📊<br>Fraud %<br><span style="font-size:22px;">{fraud_percent}%</span>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # ==================== PREDICTION TABLE ====================
         st.markdown("### 🔍 Prediction Results")
         st.dataframe(results.head(15))
 
